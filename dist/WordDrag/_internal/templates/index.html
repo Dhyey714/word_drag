@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>WordDrag</title>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --orange:       #ff8c00;
+  --orange-light: #ffb347;
+  --orange-glow:  rgba(255,140,0,0.55);
+  --green:        #00e676;
+  --red:          #ff3d57;
+  --yellow:       #ffd740;
+  --glass-bg:     rgba(8,22,68,0.38);
+  --glass-border: rgba(140,190,255,0.28);
+  --glass-shine:  rgba(210,235,255,0.22);
+  --text:         #e8f0ff;
+  --text-dim:     rgba(232,240,255,0.45);
+}
+
+html, body {
+  min-height: 100%;
+  color: var(--text);
+  font-family: 'Nunito', sans-serif;
+  overflow-x: hidden;
+  touch-action: none;
+}
+
+/* ── Fullscreen slideshow background ── */
+.nature-bg {
+  position: fixed; inset: 0; z-index: 0;
+}
+.nature-bg img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 2.5s ease-in-out;   /* slow smooth crossfade */
+  filter: brightness(0.78) saturate(1.25);
+}
+.nature-bg img.active { opacity: 1; }
+
+.nature-overlay {
+  position: fixed; inset: 0; z-index: 1;
+  background: linear-gradient(160deg,
+    rgba(4,12,45,0.58) 0%,
+    rgba(8,22,65,0.48) 50%,
+    rgba(3,8,32,0.62) 100%);
+}
+
+/* ── App ── */
+#app {
+  position: relative; z-index: 2;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  padding-bottom: 52px;
+}
+
+/* ── Header ── */
+header {
+  width: 100%; max-width: 520px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 20px 0;
+}
+.logo {
+  font-family: 'Lilita One', cursive;
+  font-size: 36px; letter-spacing: 2px;
+  color: var(--orange);
+  text-shadow: 0 0 24px var(--orange-glow), 0 2px 0 rgba(0,0,0,0.5);
+}
+.icon-btn {
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 12px; color: #fff; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; backdrop-filter: blur(10px);
+  transition: background 0.2s, transform 0.15s;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.18); transform: scale(1.08); }
+
+/* ── Glass card ── */
+.glass-card {
+  background: rgba(8,22,68,0.38);
+  border: 1px solid rgba(140,190,255,0.28);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border-radius: 24px;
+  box-shadow:
+    0 8px 40px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(210,235,255,0.22),
+    inset 0 -1px 0 rgba(0,0,60,0.3);
+}
+
+/* ── HUD ── */
+#hud {
+  display: none; width: 100%; max-width: 520px;
+  padding: 14px 20px 0;
+  justify-content: space-between; align-items: center;
+}
+#hud.visible { display: flex; }
+.hud-pill {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  backdrop-filter: blur(14px);
+  border-radius: 16px; padding: 8px 18px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.hud-label { color: var(--text-dim); font-size: 10px; letter-spacing: 2px; font-weight: 700; }
+.hud-value { font-family: 'Lilita One', cursive; font-size: 26px; line-height: 1.1; }
+#score-val { color: var(--orange-light); }
+#words-val { color: var(--green); }
+
+#timer-wrap { position: relative; width: 60px; height: 60px; }
+#timer-ring  { transform: rotate(-90deg); }
+#timer-arc {
+  fill: none; stroke: var(--green); stroke-width: 5;
+  stroke-dasharray: 163.4; stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1s linear, stroke 0.5s;
+}
+#timer-num {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Lilita One', cursive; font-size: 18px;
+  color: var(--green); transition: color 0.5s;
+}
+
+/* ── Word display ── */
+#word-display {
+  height: 50px; display: flex; align-items: center; justify-content: center;
+  margin-top: 10px;
+}
+.word-hint { color: var(--text-dim); font-size: 13px; letter-spacing: 3px; font-weight: 700; }
+#current-word {
+  font-family: 'Lilita One', cursive; font-size: 28px; letter-spacing: 5px;
+  color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.5);
+}
+.word-flash {
+  font-family: 'Lilita One', cursive; font-size: 22px; letter-spacing: 3px;
+  animation: floatUp 0.85s ease forwards;
+}
+.word-flash.good { color: var(--green);  text-shadow: 0 0 14px var(--green); }
+.word-flash.bad  { color: var(--red);    text-shadow: 0 0 14px var(--red); }
+.word-flash.dupe { color: var(--yellow); text-shadow: 0 0 14px var(--yellow); }
+@keyframes floatUp {
+  0%   { opacity:1; transform:translateY(0) scale(1); }
+  100% { opacity:0; transform:translateY(-60px) scale(1.35); }
+}
+
+/* ── GRID WRAP — rich glassy look ── */
+#grid-wrap {
+  position: relative;
+  margin-top: 8px; padding: 16px;
+  touch-action: none;
+
+  /* Deep glassy blue */
+  background:
+    linear-gradient(135deg,
+      rgba(15,50,140,0.42) 0%,
+      rgba(8,28,90,0.55) 50%,
+      rgba(5,18,65,0.48) 100%);
+  border: 1px solid rgba(140,190,255,0.3);
+  border-radius: 28px;
+
+  backdrop-filter: blur(36px) saturate(1.4);
+  -webkit-backdrop-filter: blur(36px) saturate(1.4);
+
+  box-shadow:
+    /* outer depth */
+    0 16px 56px rgba(0,8,60,0.6),
+    0 4px 16px rgba(0,0,0,0.3),
+    /* inner top shine */
+    inset 0 2px 0 rgba(180,220,255,0.28),
+    /* inner bottom shadow */
+    inset 0 -2px 0 rgba(0,0,80,0.35),
+    /* subtle inner glow */
+    inset 0 0 40px rgba(60,120,255,0.08);
+}
+
+#grid { display: grid; }
+#path-svg { position: absolute; inset: 16px; pointer-events: none; overflow: visible; }
+
+/* ── Tiles ── */
+.tile {
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; position: relative;
+  user-select: none; -webkit-user-select: none;
+
+  /* Frosted glass tile */
+  background: linear-gradient(145deg,
+    rgba(255,255,255,0.18) 0%,
+    rgba(160,200,255,0.08) 60%,
+    rgba(80,130,255,0.05) 100%);
+  border: 1px solid rgba(255,255,255,0.22);
+  box-shadow:
+    0 4px 16px rgba(0,0,100,0.25),
+    inset 0 1px 0 rgba(255,255,255,0.35),
+    inset 0 -1px 0 rgba(0,0,60,0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  transition: transform 0.12s, background 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.tile:hover:not(.selected):not(.flash-good):not(.flash-bad):not(.flash-dupe) {
+  transform: scale(1.06);
+  background: linear-gradient(145deg, rgba(255,255,255,0.24), rgba(160,200,255,0.14));
+}
+.tile .letter {
+  font-family: 'Lilita One', cursive; color: #fff; line-height: 1;
+  text-shadow: 0 1px 6px rgba(0,0,80,0.55), 0 0 14px rgba(255,255,255,0.12);
+  pointer-events: none;
+}
+.tile .idx {
+  position: absolute; top: 3px; right: 6px;
+  font-family: 'Lilita One', cursive; font-size: 10px;
+  color: rgba(200,230,255,0.65); pointer-events: none;
+}
+
+/* Selected = blue glow on TILES ONLY (no grid-wide change) */
+.tile.selected {
+  background: linear-gradient(145deg,
+    rgba(80,160,255,0.48) 0%,
+    rgba(40,100,220,0.38) 100%) !important;
+  border-color: rgba(140,200,255,0.75) !important;
+  box-shadow:
+    0 0 18px rgba(80,160,255,0.5),
+    0 0 6px rgba(120,190,255,0.4),
+    inset 0 1px 0 rgba(200,230,255,0.35) !important;
+  transform: scale(0.93) translateY(2px);
+}
+
+.tile.flash-good {
+  background: linear-gradient(145deg, rgba(0,230,118,0.52), rgba(0,160,80,0.38)) !important;
+  border-color: rgba(0,230,118,0.78) !important;
+  box-shadow: 0 0 24px rgba(0,230,118,0.58), inset 0 1px 0 rgba(180,255,220,0.3) !important;
+  animation: wobble 0.38s;
+}
+.tile.flash-bad {
+  background: linear-gradient(145deg, rgba(255,61,87,0.52), rgba(180,0,30,0.38)) !important;
+  border-color: rgba(255,61,87,0.75) !important;
+  box-shadow: 0 0 22px rgba(255,0,50,0.52) !important;
+  animation: wobble 0.38s;
+}
+.tile.flash-dupe {
+  background: linear-gradient(145deg, rgba(255,215,64,0.52), rgba(200,140,0,0.38)) !important;
+  border-color: rgba(255,215,64,0.78) !important;
+  box-shadow: 0 0 22px rgba(255,200,0,0.52) !important;
+  animation: wobble 0.38s;
+}
+@keyframes wobble {
+  0%,100% { transform: rotate(0) scale(1); }
+  25%     { transform: rotate(-7deg) scale(0.95); }
+  75%     { transform: rotate(7deg)  scale(0.95); }
+}
+
+/* ── Found chips ── */
+#found-bar {
+  display: none; flex-wrap: wrap; gap: 6px; justify-content: center;
+  margin-top: 10px; max-width: 520px; padding: 0 16px;
+}
+#found-bar.visible { display: flex; }
+.found-chip {
+  background: rgba(0,230,118,0.12); border: 1px solid rgba(0,230,118,0.3);
+  border-radius: 8px; padding: 3px 10px;
+  font-size: 11px; font-weight: 900; color: var(--green); letter-spacing: 1px;
+  animation: chipIn 0.2s ease;
+}
+@keyframes chipIn { from{opacity:0;transform:scale(0.8)} to{opacity:1;transform:scale(1)} }
+
+/* ── Hint banner ── */
+#hint-banner {
+  display: none;
+  align-items: center; gap: 10px;
+  margin-top: 8px;
+  padding: 10px 18px;
+  background: rgba(255,215,64,0.12);
+  border: 1px solid rgba(255,215,64,0.35);
+  border-radius: 16px;
+  backdrop-filter: blur(14px);
+  animation: hintPop 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  max-width: 480px; width: calc(100% - 40px);
+}
+#hint-banner.visible { display: flex; }
+@keyframes hintPop {
+  from { opacity:0; transform: translateY(8px) scale(0.95); }
+  to   { opacity:1; transform: translateY(0)  scale(1); }
+}
+.hint-label {
+  font-size: 10px; font-weight: 900; letter-spacing: 2px;
+  color: var(--yellow); white-space: nowrap;
+}
+.hint-word {
+  font-family: 'Lilita One', cursive;
+  font-size: 20px; letter-spacing: 4px;
+  color: #fff; text-shadow: 0 0 12px rgba(255,215,64,0.6);
+  flex: 1; text-align: center;
+}
+.hint-close {
+  background: none; border: none; color: rgba(255,255,255,0.4);
+  font-size: 16px; cursor: pointer; padding: 0 2px; line-height: 1;
+  transition: color 0.15s;
+}
+.hint-close:hover { color: #fff; }
+
+/* Hint tile highlight */
+.tile.hint-highlight {
+  background: linear-gradient(145deg, rgba(255,215,64,0.48), rgba(200,140,0,0.35)) !important;
+  border-color: rgba(255,215,64,0.78) !important;
+  box-shadow: 0 0 20px rgba(255,200,0,0.5), inset 0 1px 0 rgba(255,240,180,0.3) !important;
+}
+
+/* ── Screens ── */
+.screen {
+  width: 100%; max-width: 480px;
+  display: none; flex-direction: column; align-items: center;
+  padding: 0 20px; margin-top: 24px;
+  animation: fadeIn 0.3s ease;
+}
+.screen.visible { display: flex; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+/* Start */
+#start-screen { text-align: center; }
+.big-emoji { font-size: 64px; margin-bottom: 10px; filter: drop-shadow(0 4px 16px var(--orange-glow)); }
+.instructions { color: var(--text-dim); font-size: 14px; line-height: 1.8; max-width: 300px; margin: 0 auto 24px; }
+.instructions strong { color: var(--orange-light); }
+.btn-play {
+  font-family: 'Lilita One', cursive; font-size: 22px; letter-spacing: 2px; color: #fff;
+  background: linear-gradient(135deg, #ff8c00, #e65c00);
+  border: none; border-radius: 18px; padding: 16px 60px;
+  box-shadow: 0 6px 0 #a33c00, 0 8px 24px rgba(255,100,0,0.45);
+  cursor: pointer; transition: transform 0.1s, box-shadow 0.1s;
+}
+.btn-play:active { transform: translateY(4px); box-shadow: 0 2px 0 #a33c00; }
+
+/* Settings */
+.settings-card { width: 100%; padding: 24px; }
+.settings-title {
+  font-family: 'Lilita One', cursive; font-size: 22px;
+  color: var(--orange); text-align: center; margin-bottom: 24px; letter-spacing: 1px;
+}
+.setting-group { margin-bottom: 22px; }
+.setting-label { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: var(--text-dim); margin-bottom: 10px; display: block; }
+.setting-value { font-family: 'Lilita One', cursive; font-size: 15px; color: var(--orange-light); }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.opt-btn {
+  font-family: 'Lilita One', cursive; font-size: 14px; padding: 9px 18px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.07); color: var(--text-dim);
+  cursor: pointer; transition: all 0.2s; backdrop-filter: blur(8px); letter-spacing: 1px;
+}
+.opt-btn:hover { border-color: var(--orange-light); color: var(--orange-light); }
+.opt-btn.active {
+  background: linear-gradient(135deg, rgba(255,140,0,0.25), rgba(255,80,0,0.15));
+  border-color: var(--orange); color: var(--orange-light);
+  box-shadow: 0 0 12px rgba(255,140,0,0.25);
+}
+.slider-wrap { display: flex; align-items: center; gap: 12px; }
+.slider-wrap input[type=range] {
+  flex: 1; height: 6px; -webkit-appearance: none; appearance: none;
+  background: linear-gradient(90deg, var(--orange), var(--orange-light));
+  border-radius: 3px; outline: none; cursor: pointer;
+}
+.slider-wrap input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 8px rgba(255,140,0,0.6), 0 2px 4px rgba(0,0,0,0.3); cursor: pointer;
+}
+.slider-label { font-family: 'Lilita One', cursive; font-size: 18px; color: var(--orange-light); min-width: 24px; text-align: center; }
+.btn-done {
+  font-family: 'Lilita One', cursive; font-size: 16px; letter-spacing: 1px; color: #fff;
+  background: linear-gradient(135deg, #ff8c00, #e65c00);
+  border: none; border-radius: 14px; padding: 14px 0; width: 100%;
+  box-shadow: 0 4px 0 #a33c00; cursor: pointer; margin-top: 8px; transition: transform 0.1s;
+}
+.btn-done:active { transform: translateY(3px); }
+
+/* End */
+.end-card { width: 100%; padding: 24px 20px; }
+.end-title { font-family: 'Lilita One', cursive; font-size: 26px; color: var(--yellow); text-align: center; margin-bottom: 4px; }
+.end-lbl { text-align: center; color: var(--text-dim); font-size: 10px; letter-spacing: 3px; margin-bottom: 8px; }
+.end-score {
+  font-family: 'Lilita One', cursive; font-size: 54px;
+  color: var(--orange-light); text-align: center; line-height: 1;
+  filter: drop-shadow(0 0 18px var(--orange-glow));
+}
+.end-sub { text-align: center; color: var(--text-dim); font-size: 13px; margin-top: 4px; margin-bottom: 14px; }
+.longest-box {
+  background: rgba(255,140,0,0.08); border: 1px solid rgba(255,140,0,0.25);
+  border-radius: 16px; padding: 14px 16px 14px; text-align: center; margin-bottom: 14px;
+}
+.longest-lbl { color: var(--text-dim); font-size: 10px; letter-spacing: 3px; margin-bottom: 8px; font-weight: 900; }
+#longest-word-text {
+  font-family: 'Lilita One', cursive; font-size: 26px; letter-spacing: 5px;
+  color: var(--orange-light); filter: drop-shadow(0 0 10px var(--orange-glow)); margin-bottom: 10px;
+}
+#longest-found-badge { display:none; margin-bottom: 8px; font-size:12px; color: var(--green); font-weight: 900; }
+#longest-grid-wrap { display: none; justify-content: center; margin-top: 8px; }
+#longest-grid { display: grid; gap: 4px; }
+.mini-tile {
+  border-radius: 8px; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center; position: relative;
+  font-family: 'Lilita One', cursive; font-size: 14px; color: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09);
+}
+.mini-tile.on-path {
+  background: linear-gradient(145deg, rgba(255,140,0,0.55), rgba(200,80,0,0.4));
+  border-color: rgba(255,160,0,0.8); color: #fff;
+  box-shadow: 0 0 10px rgba(255,140,0,0.4); font-size: 15px;
+}
+.mini-tile .path-num { position: absolute; top: 1px; right: 3px; font-size: 8px; color: rgba(255,255,255,0.6); }
+.end-found-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 16px; }
+.end-actions { display: flex; gap: 10px; }
+.btn-share {
+  flex: 1; font-family: 'Lilita One', cursive; font-size: 14px; letter-spacing: 1px;
+  color: #000; background: linear-gradient(135deg, var(--yellow), #ffa000);
+  border: none; border-radius: 12px; padding: 14px 0;
+  box-shadow: 0 4px 0 #b37000; cursor: pointer; transition: background 0.3s, color 0.3s;
+}
+.btn-share.copied { background: linear-gradient(135deg, var(--green), #00b050); box-shadow: 0 4px 0 #007030; color: #fff; }
+.btn-again {
+  flex: 1; font-family: 'Lilita One', cursive; font-size: 14px; letter-spacing: 1px;
+  color: #fff; background: linear-gradient(135deg, #2979ff, #1a50cc);
+  border: none; border-radius: 12px; padding: 14px 0;
+  box-shadow: 0 4px 0 #0d2e80; cursor: pointer;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+</style>
+</head>
+<body>
+
+<!-- Fullscreen nature slideshow — one image at a time, 10s interval -->
+<div class="nature-bg" id="nature-bg">
+  <img src="https://images.unsplash.com/photo-1448375240586-882707db888b?w=1600&q=80" class="active" alt="">
+  <img src="https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?w=1600&q=80" alt="">
+  <img src="https://images.unsplash.com/photo-1501854140801-50d01698950b?w=1600&q=80" alt="">
+  <img src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1600&q=80" alt="">
+  <img src="https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?w=1600&q=80" alt="">
+  <img src="https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=1600&q=80" alt="">
+</div>
+<div class="nature-overlay"></div>
+
+<div id="app">
+  <header>
+    <div class="logo">WordDrag</div>
+    <div class="icon-btn" id="settings-btn">⚙️</div>
+  </header>
+
+  <div id="hud">
+    <div class="hud-pill">
+      <div class="hud-label">SCORE</div>
+      <div class="hud-value" id="score-val">0</div>
+    </div>
+    <div id="timer-wrap">
+      <svg id="timer-ring" viewBox="0 0 60 60" width="60" height="60">
+        <circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="5"/>
+        <circle id="timer-arc" cx="30" cy="30" r="26"/>
+      </svg>
+      <div id="timer-num">120</div>
+    </div>
+    <div class="hud-pill" style="text-align:right">
+      <div class="hud-label">WORDS</div>
+      <div class="hud-value" id="words-val">0</div>
+    </div>
+  </div>
+
+  <div id="word-display">
+    <span class="word-hint">drag letters to spell</span>
+  </div>
+
+  <div id="grid-wrap" style="display:none">
+    <div id="grid"></div>
+    <svg id="path-svg"></svg>
+  </div>
+
+  <div id="found-bar"></div>
+
+  <!-- Hint banner -->
+  <div id="hint-banner">
+    <span class="hint-label">💡 HINT</span>
+    <span class="hint-word" id="hint-word"></span>
+    <button class="hint-close" id="hint-close">✕</button>
+  </div>
+
+  <!-- Start -->
+  <div class="screen visible" id="start-screen">
+    <div class="big-emoji">🔤</div>
+    <p class="instructions">
+      Drag through adjacent tiles to spell words.<br>
+      Drag <strong>back</strong> to undo a letter.<br>
+      Diagonals count! Longer words = more points.<br>
+      You have <strong id="time-preview">2 minutes</strong> — go!
+    </p>
+    <button class="btn-play" id="start-btn">PLAY</button>
+  </div>
+
+  <!-- Settings -->
+  <div class="screen" id="settings-screen">
+    <div class="glass-card settings-card">
+      <div class="settings-title">⚙️ Settings</div>
+      <div class="setting-group">
+        <span class="setting-label">GRID SIZE</span>
+        <div class="btn-group" id="size-group">
+          <button class="opt-btn" data-size="3">3×3</button>
+          <button class="opt-btn active" data-size="4">4×4</button>
+          <button class="opt-btn" data-size="5">5×5</button>
+          <button class="opt-btn" data-size="6">6×6</button>
+        </div>
+      </div>
+      <div class="setting-group">
+        <span class="setting-label">MINIMUM WORD LENGTH — <span class="setting-value" id="min-len-val">3 letters</span></span>
+        <div class="slider-wrap">
+          <span class="slider-label">3</span>
+          <input type="range" id="min-len-slider" min="3" max="5" value="3" step="1">
+          <span class="slider-label">5</span>
+        </div>
+      </div>
+      <div class="setting-group">
+        <span class="setting-label">TIME LIMIT</span>
+        <div class="btn-group" id="time-group">
+          <button class="opt-btn" data-time="30">30s</button>
+          <button class="opt-btn" data-time="60">60s</button>
+          <button class="opt-btn" data-time="90">90s</button>
+          <button class="opt-btn active" data-time="120">120s</button>
+          <button class="opt-btn" data-time="240">240s</button>
+        </div>
+      </div>
+      <button class="btn-done" id="back-btn">DONE</button>
+    </div>
+  </div>
+
+  <!-- End -->
+  <div class="screen" id="end-screen">
+    <div class="glass-card end-card">
+      <div class="end-title" id="end-title">🏆 LEGENDARY!</div>
+      <div class="end-lbl">FINAL SCORE</div>
+      <div class="end-score" id="end-score">0</div>
+      <div class="end-sub" id="end-sub">0 words found</div>
+      <div class="longest-box">
+        <div class="longest-lbl">LONGEST POSSIBLE WORD</div>
+        <div id="longest-word-text">searching…</div>
+        <div id="longest-found-badge">✓ you found it!</div>
+        <div id="longest-grid-wrap"><div id="longest-grid"></div></div>
+      </div>
+      <div class="end-found-list" id="end-found"></div>
+      <div class="end-actions">
+        <button class="btn-share" id="share-btn">📤 SHARE</button>
+        <button class="btn-again" id="again-btn">🔄 AGAIN</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Background slideshow — 10s interval, 2.5s crossfade ──────────────────────
+(function () {
+  const imgs = document.querySelectorAll(".nature-bg img");
+  let cur = 0;
+  setInterval(() => {
+    imgs[cur].classList.remove("active");
+    cur = (cur + 1) % imgs.length;
+    imgs[cur].classList.add("active");
+  }, 10000);   // change every 10 seconds
+})();
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+let settings = { gridSize: 4, minLen: 3, gameDuration: 120 };
+
+// ── Game state ────────────────────────────────────────────────────────────────
+let grid = [], path = [], dragging = false;
+let foundWords = [], score = 0;
+let timeLeft = 120, timerInterval = null, timeUsed = 0;
+let gameState = "idle", lastGrid = [];
+const CIRC = 2 * Math.PI * 26;
+
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const hudEl       = document.getElementById("hud");
+const gridWrap    = document.getElementById("grid-wrap");
+const gridEl      = document.getElementById("grid");
+const pathSvg     = document.getElementById("path-svg");
+const wordDisplay = document.getElementById("word-display");
+const foundBar    = document.getElementById("found-bar");
+const startScreen = document.getElementById("start-screen");
+const settingsScr = document.getElementById("settings-screen");
+const endScreen   = document.getElementById("end-screen");
+const scoreVal    = document.getElementById("score-val");
+const wordsVal    = document.getElementById("words-val");
+const timerArc    = document.getElementById("timer-arc");
+const timerNum    = document.getElementById("timer-num");
+
+function showScreen(el) {
+  [startScreen, settingsScr, endScreen].forEach(s => s.classList.remove("visible"));
+  if (el) el.classList.add("visible");
+}
+
+// ── Settings wiring ───────────────────────────────────────────────────────────
+document.getElementById("settings-btn").addEventListener("click", () => {
+  if (gameState === "playing") return;
+  showScreen(settingsScr);
+});
+document.getElementById("back-btn").addEventListener("click", () => {
+  showScreen(startScreen); updateTimePreview();
+});
+document.querySelectorAll("#size-group .opt-btn").forEach(btn =>
+  btn.addEventListener("click", () => { activate("#size-group", btn); settings.gridSize = +btn.dataset.size; })
+);
+document.getElementById("min-len-slider").addEventListener("input", function () {
+  settings.minLen = +this.value;
+  document.getElementById("min-len-val").textContent = this.value + " letters";
+});
+document.querySelectorAll("#time-group .opt-btn").forEach(btn =>
+  btn.addEventListener("click", () => { activate("#time-group", btn); settings.gameDuration = +btn.dataset.time; })
+);
+function activate(sel, btn) {
+  document.querySelectorAll(sel + " .opt-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+}
+function updateTimePreview() {
+  const s = settings.gameDuration;
+  document.getElementById("time-preview").textContent =
+    s >= 60 ? `${s / 60} minute${s > 60 ? "s" : ""}` : `${s} seconds`;
+}
+
+// ── Start game ────────────────────────────────────────────────────────────────
+document.getElementById("start-btn").addEventListener("click", startGame);
+document.getElementById("again-btn").addEventListener("click", () => {
+  showScreen(startScreen); updateTimePreview();
+});
+
+async function startGame() {
+  showScreen(null);
+  gridWrap.style.display = "block";
+  foundBar.innerHTML = ""; foundBar.classList.remove("visible");
+
+  path = []; dragging = false; foundWords = []; score = 0;
+  timeLeft = settings.gameDuration; timeUsed = 0;
+  gameState = "playing";
+
+  try {
+    const res  = await fetch(`/api/new-grid?size=${settings.gridSize}`);
+    const data = await res.json();
+    grid = data.grid; lastGrid = data.grid;
+  } catch (e) {
+    alert("Could not load grid — is the Flask server running?");
+    showScreen(startScreen); return;
+  }
+
+  renderGrid();
+  updateHUD(); updateTimer();
+  hudEl.classList.add("visible");
+  setWordDisplay("hint");
+  clearInterval(timerInterval);
+  timerInterval = setInterval(tick, 1000);
+}
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+function tick() {
+  timeUsed++; timeLeft--;
+  updateTimer();
+  if (timeLeft <= 0) { clearInterval(timerInterval); endGame(); }
+}
+function updateTimer() {
+  const pct = timeLeft / settings.gameDuration;
+  timerArc.style.strokeDashoffset = CIRC * (1 - pct);
+  timerNum.textContent = timeLeft;
+  const color = pct > 0.5 ? "#00e676" : pct > 0.25 ? "#ffb347" : "#ff3d57";
+  timerArc.style.stroke = timerNum.style.color = color;
+  timerNum.style.animation = timeLeft <= 10 ? "pulse 0.5s infinite" : "none";
+}
+
+// ── Render grid ───────────────────────────────────────────────────────────────
+function renderGrid() {
+  const size = grid.length;
+  const ts   = size <= 3 ? 86 : size === 4 ? 72 : size === 5 ? 60 : 50;
+  const gap  = size <= 4 ? 10 : 8;
+  const fs   = size <= 3 ? 36 : size === 4 ? 30 : size === 5 ? 24 : 20;
+
+  gridEl.style.gridTemplateColumns = `repeat(${size}, ${ts}px)`;
+  gridEl.style.gap = gap + "px";
+  gridEl.innerHTML = ""; pathSvg.innerHTML = "";
+
+  const total = size * ts + (size - 1) * gap;
+  pathSvg.setAttribute("width", total); pathSvg.setAttribute("height", total);
+  pathSvg.style.width = pathSvg.style.height = total + "px";
+
+  grid.forEach((row, r) => row.forEach((letter, c) => {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.dataset.row = r; tile.dataset.col = c;
+    tile.style.width = tile.style.height = ts + "px";
+    tile.innerHTML = `<span class="letter" style="font-size:${fs}px">${letter}</span>`;
+    tile.addEventListener("mousedown",  () => startDrag(r, c));
+    tile.addEventListener("mouseenter", () => continueDrag(r, c));
+    gridEl.appendChild(tile);
+  }));
+
+  gridEl._ts = ts; gridEl._gap = gap;
+
+  gridWrap.removeEventListener("touchstart", onTouchStart);
+  gridWrap.removeEventListener("touchmove",  onTouchMove);
+  gridWrap.removeEventListener("touchend",   onTouchEnd);
+  gridWrap.addEventListener("touchstart", onTouchStart, { passive: false });
+  gridWrap.addEventListener("touchmove",  onTouchMove,  { passive: false });
+  gridWrap.addEventListener("touchend",   onTouchEnd,   { passive: false });
+}
+
+function getTile(r, c) { return gridEl.querySelector(`[data-row="${r}"][data-col="${c}"]`); }
+
+// ── Drag — with backward undo and centre-biased sensitivity ──────────────────
+function startDrag(r, c) {
+  if (gameState !== "playing") return;
+  dragging = true; path = [{ r, c }];
+  refreshTiles(); drawLines();
+}
+
+function continueDrag(r, c) {
+  if (!dragging || gameState !== "playing") return;
+
+  // Backward drag: if entering the second-to-last tile, pop the last one off
+  if (path.length >= 2) {
+    const prev = path[path.length - 2];
+    if (prev.r === r && prev.c === c) {
+      path.pop();
+      refreshTiles(); drawLines(); setWordDisplay("current");
+      return;
+    }
+  }
+
+  if (path.some(p => p.r === r && p.c === c)) return;
+
+  const last = path[path.length - 1];
+  if (Math.abs(last.r - r) <= 1 && Math.abs(last.c - c) <= 1) {
+    path.push({ r, c }); refreshTiles(); drawLines(); setWordDisplay("current");
+  }
+}
+
+document.addEventListener("mouseup", () => { if (dragging) submitWord(); });
+
+function onTouchStart(e) {
+  e.preventDefault();
+  const t = e.touches[0];
+  const c = cellAt(t.clientX, t.clientY);
+  if (c) startDrag(c.r, c.c);
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  const t = e.touches[0];
+  const c = cellAt(t.clientX, t.clientY);
+  if (c) continueDrag(c.r, c.c);
+}
+function onTouchEnd(e) {
+  e.preventDefault();
+  if (dragging) submitWord();
+}
+
+// Centre-biased sensitivity: only register if pointer is in the inner 60% of the tile
+function cellAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const tile = el?.closest(".tile");
+  if (!tile) return null;
+  const rect = tile.getBoundingClientRect();
+  const marginX = rect.width  * 0.2;   // 20% buffer on each side = inner 60%
+  const marginY = rect.height * 0.2;
+  if (
+    x < rect.left   + marginX || x > rect.right  - marginX ||
+    y < rect.top    + marginY || y > rect.bottom - marginY
+  ) return null;
+  return { r: +tile.dataset.row, c: +tile.dataset.col };
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitWord() {
+  dragging = false;
+  if (path.length < settings.minLen) { resetPath(); return; }
+
+  const word   = path.map(p => grid[p.r][p.c]).join("");
+  const wordUp = word.toUpperCase();
+
+  if (foundWords.includes(wordUp)) {
+    flashTiles("dupe"); showWordFlash(wordUp, 0, "dupe");
+    resetPath(); return;
+  }
+
+  const res  = await fetch("/api/check-word", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ word, min_len: settings.minLen })
+  });
+  const data = await res.json();
+
+  if (data.valid) {
+    flashTiles("good"); showWordFlash(data.word, data.score, "good");
+    foundWords.unshift(data.word);
+    score += data.score;
+    updateHUD(); addFoundChip(data.word);
+  } else {
+    flashTiles("bad"); showWordFlash(wordUp, 0, "bad");
+  }
+  resetPath();
+}
+
+function resetPath() {
+  path = []; dragging = false;
+  refreshTiles(); drawLines(); setWordDisplay("hint");
+}
+
+// ── Tile visuals ──────────────────────────────────────────────────────────────
+function refreshTiles() {
+  grid.forEach((row, r) => row.forEach((_, c) => {
+    const tile = getTile(r, c);
+    if (!tile) return;
+    const idx = path.findIndex(p => p.r === r && p.c === c);
+    tile.classList.toggle("selected", idx >= 0);
+    let badge = tile.querySelector(".idx");
+    if (idx >= 0) {
+      if (!badge) { badge = document.createElement("span"); badge.className = "idx"; tile.appendChild(badge); }
+      badge.textContent = idx + 1;
+    } else badge?.remove();
+  }));
+  if (path.length > 0) setWordDisplay("current");
+}
+
+function flashTiles(type) {
+  const cls = `flash-${type}`;
+  path.forEach(({ r, c }) => {
+    const t = getTile(r, c);
+    if (!t) return;
+    t.classList.remove("selected");
+    t.classList.add(cls);
+    setTimeout(() => t.classList.remove(cls), 700);
+  });
+}
+
+// ── SVG connector lines ───────────────────────────────────────────────────────
+function drawLines() {
+  pathSvg.innerHTML = "";
+  if (path.length < 2) return;
+  const ts = gridEl._ts || 72, gap = gridEl._gap || 10, step = ts + gap;
+  const cx = c => c * step + ts / 2, cy = r => r * step + ts / 2;
+  for (let i = 1; i < path.length; i++) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", cx(path[i-1].c)); line.setAttribute("y1", cy(path[i-1].r));
+    line.setAttribute("x2", cx(path[i].c));   line.setAttribute("y2", cy(path[i].r));
+    line.setAttribute("stroke", "rgba(140,200,255,0.75)");
+    line.setAttribute("stroke-width", "3"); line.setAttribute("stroke-linecap", "round");
+    pathSvg.appendChild(line);
+  }
+}
+
+// ── Word display ──────────────────────────────────────────────────────────────
+function setWordDisplay(mode) {
+  if (mode === "hint") {
+    wordDisplay.innerHTML = `<span class="word-hint">drag letters to spell</span>`;
+  } else if (mode === "current" && path.length > 0) {
+    wordDisplay.innerHTML = `<span id="current-word">${path.map(p => grid[p.r][p.c]).join("")}</span>`;
+  }
+}
+function showWordFlash(word, pts, type) {
+  const el = document.createElement("span");
+  el.className = `word-flash ${type}`;
+  el.textContent = type === "good" ? `${word} +${pts}` :
+                   type === "dupe" ? `${word} — already found!` : `${word} ✗`;
+  wordDisplay.innerHTML = ""; wordDisplay.appendChild(el);
+  setTimeout(() => setWordDisplay("hint"), 950);
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  scoreVal.textContent = score.toLocaleString();
+  wordsVal.textContent = foundWords.length;
+}
+function addFoundChip(word) {
+  foundBar.classList.add("visible");
+  if (foundBar.children.length >= 14) foundBar.removeChild(foundBar.lastChild);
+  const chip = document.createElement("span");
+  chip.className = "found-chip"; chip.textContent = word;
+  foundBar.insertBefore(chip, foundBar.firstChild);
+}
+
+// ── End game ──────────────────────────────────────────────────────────────────
+async function endGame() {
+  gameState = "ended"; dragging = false; path = [];
+  refreshTiles();
+
+  const tier = score >= 2000 ? "🏆 LEGENDARY!" :
+               score >= 1200 ? "🥇 AMAZING!"   :
+               score >= 600  ? "🥈 GREAT JOB!" : "🥉 KEEP GOING!";
+
+  document.getElementById("end-title").textContent = tier;
+  document.getElementById("end-score").textContent = score.toLocaleString();
+  document.getElementById("end-sub").textContent   =
+    `${foundWords.length} word${foundWords.length !== 1 ? "s" : ""} found`;
+  document.getElementById("end-found").innerHTML   =
+    foundWords.map(w => `<span class="found-chip">${w}</span>`).join("");
+
+  gridWrap.style.display = "none";
+  foundBar.classList.remove("visible");
+  showScreen(endScreen);
+  document.getElementById("share-btn").classList.remove("copied");
+  document.getElementById("share-btn").textContent = "📤 SHARE";
+
+  // Longest word
+  document.getElementById("longest-word-text").textContent = "searching…";
+  document.getElementById("longest-found-badge").style.display = "none";
+  document.getElementById("longest-grid-wrap").style.display   = "none";
+
+  try {
+    const res  = await fetch("/api/longest-word", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grid: lastGrid, min_len: settings.minLen })
+    });
+    const data = await res.json();
+    const lw = data.word, lp = data.path || [];
+    document.getElementById("longest-word-text").textContent = lw || "none found";
+    if (lw && foundWords.includes(lw))
+      document.getElementById("longest-found-badge").style.display = "block";
+    if (lp.length > 0) {
+      renderMiniGrid(lastGrid, lp);
+      document.getElementById("longest-grid-wrap").style.display = "flex";
+    }
+  } catch (e) {
+    document.getElementById("longest-word-text").textContent = "unavailable";
+  }
+}
+
+function renderMiniGrid(g, longestPath) {
+  const size = g.length;
+  const lg   = document.getElementById("longest-grid");
+  lg.style.gridTemplateColumns = `repeat(${size}, 36px)`;
+  lg.style.gap = "4px"; lg.innerHTML = "";
+  const pathMap = {};
+  longestPath.forEach(([r, c], i) => { pathMap[`${r}-${c}`] = i + 1; });
+  g.forEach((row, r) => row.forEach((letter, c) => {
+    const mt  = document.createElement("div");
+    const idx = pathMap[`${r}-${c}`];
+    mt.className = "mini-tile" + (idx ? " on-path" : "");
+    mt.style.position = "relative"; mt.textContent = letter;
+    if (idx) {
+      const num = document.createElement("span");
+      num.className = "path-num"; num.textContent = idx; mt.appendChild(num);
+    }
+    lg.appendChild(mt);
+  }));
+}
+
+// ── Hint system ───────────────────────────────────────────────────────────────
+const HINT_IDLE_MS  = 15000;   // 15 s of no grid interaction
+const hintBanner    = document.getElementById("hint-banner");
+const hintWordEl    = document.getElementById("hint-word");
+let   hintIdleTimer = null;
+let   hintTilePaths = [];      // currently highlighted hint tiles
+
+// Reset the idle countdown whenever the player touches the grid
+function resetHintTimer() {
+  clearTimeout(hintIdleTimer);
+  dismissHint();                // clear any visible hint immediately on interaction
+  if (gameState !== "playing") return;
+  hintIdleTimer = setTimeout(showHint, HINT_IDLE_MS);
+}
+
+// Wire grid interaction events to reset timer
+gridWrap.addEventListener("mousedown",  resetHintTimer);
+gridWrap.addEventListener("touchstart", resetHintTimer, { passive: true });
+
+async function showHint() {
+  if (gameState !== "playing") return;
+
+  try {
+    const res  = await fetch("/api/hint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grid:    lastGrid,
+        min_len: settings.minLen,
+        found:   foundWords,
+      }),
+    });
+    const data = await res.json();
+    if (!data.word) return;   // no unfound hint available
+
+    hintWordEl.textContent = data.word;
+
+    // Highlight tiles on the grid
+    hintTilePaths = data.path || [];
+    hintTilePaths.forEach(([r, c]) => {
+      const t = getTile(r, c);
+      if (t) t.classList.add("hint-highlight");
+    });
+
+    hintBanner.classList.add("visible");
+
+    // Auto-dismiss after 6 s then start idle timer again
+    clearTimeout(hintIdleTimer);
+    hintIdleTimer = setTimeout(() => {
+      dismissHint();
+      if (gameState === "playing")
+        hintIdleTimer = setTimeout(showHint, HINT_IDLE_MS);
+    }, 6000);
+
+  } catch (e) { /* silently ignore network errors */ }
+}
+
+function dismissHint() {
+  hintBanner.classList.remove("visible");
+  hintTilePaths.forEach(([r, c]) => {
+    const t = getTile(r, c);
+    if (t) t.classList.remove("hint-highlight");
+  });
+  hintTilePaths = [];
+}
+
+document.getElementById("hint-close").addEventListener("click", () => {
+  dismissHint();
+  // Restart idle timer after manual close
+  if (gameState === "playing")
+    hintIdleTimer = setTimeout(showHint, HINT_IDLE_MS);
+});
+
+// Also reset hint timer when a new game starts (hook into startGame flow)
+const _origStartGame = startGame;
+// We patch by resetting inside the existing startGame — simpler: just call
+// resetHintTimer at the end of the game start block.  We'll call it via a
+// MutationObserver-free approach: override the timer start in startGame.
+// Actually, we just call resetHintTimer() after the grid renders.
+// To avoid duplicating async code, we watch for hud becoming visible.
+new MutationObserver(() => {
+  if (hudEl.classList.contains("visible") && gameState === "playing") {
+    clearTimeout(hintIdleTimer);
+    dismissHint();
+    hintIdleTimer = setTimeout(showHint, HINT_IDLE_MS);
+  }
+}).observe(hudEl, { attributes: true, attributeFilter: ["class"] });
+
+// Clear hint when game ends
+const _endGame = endGame;
+// endGame is async so we wrap cleanly:
+const endGameOrig = endGame;
+endGame = async function() {
+  clearTimeout(hintIdleTimer);
+  dismissHint();
+  await endGameOrig();
+};
+
+document.getElementById("share-btn").addEventListener("click", () => {
+  const tier = score >= 2000 ? "LEGENDARY" : score >= 1200 ? "AMAZING" : score >= 600 ? "GREAT" : "GOOD START";
+  const text = `📝 WordDrag — ${tier}\n🔥 Score: ${score.toLocaleString()} pts\n📚 Words: ${foundWords.length} found\n⏱️ ${timeUsed}s\n\nCan you beat me? 🎮`;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById("share-btn");
+    btn.classList.add("copied"); btn.textContent = "✓ COPIED!";
+    setTimeout(() => { btn.classList.remove("copied"); btn.textContent = "📤 SHARE"; }, 2500);
+  });
+});
+</script>
+</body>
+</html>

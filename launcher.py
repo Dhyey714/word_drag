@@ -1,0 +1,12 @@
+import threading
+import webbrowser
+import time
+from app import app
+
+def open_browser():
+    time.sleep(1.5)  # wait for Flask to start
+    webbrowser.open("http://127.0.0.1:5000")
+
+if __name__ == "__main__":
+    threading.Thread(target=open_browser, daemon=True).start()
+    app.run(host="127.0.0.1", port=5000, debug=False)
